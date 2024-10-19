@@ -1,6 +1,7 @@
 import wikipediaapi, datetime, uuid, sys, pyttsx3, os
 import mysql.connector, configparser, random, subprocess
-import win32com.client 
+import win32com.client, urllib.parse, requests
+from bs4 import BeautifulSoup
 
 class WikipediaArticle:
     def __init__(self, id, title, url, last_retrieved_date, status):
@@ -151,25 +152,46 @@ class WikiRadioETL:
         self.con.commit()
         cur.close()
 
+    def search_online(self, title):
+        encoded_title: str = urllib.parse.quote_plus(title)
+        url: str = """https://en.wikipedia.org/w/index.php?search={}&title=Special%3ASearch&ns0=1""".format(encoded_title)
+        req = requests.get(url)
+        html_text = req.text
+        soup = BeautifulSoup(html_text, 'html.parser')
+        #$x("//a[@data-serp-pos=0]")[0].attributes['title']
+        all_links = soup.find_all('a', {"data-serp-pos": "0"})
+        if len(all_links) > 0:
+            return all_links[0].get_text()
+        all_links = soup.find_all('span', {"class": "mw-page-title-main"})
+        if len(all_links) > 0:
+            return all_links[0].get_text()
+        return None
+
     def download_article(self, name):
         wiki = wikipediaapi.Wikipedia('Wikiradio', 'en')
         wiki_page = wiki.page(name)
         if not wiki_page.exists():
-            return
+            name = self.search_online(name)
+            wiki_page = wiki.page(name)
+            if not wiki_page.exists():
+                return
         wiki_article_db = self.from_url(wiki_page.fullurl)
         if wiki_article_db != None and (wiki_article_db.status == 'UNINIT' or self.is_expired(wiki_article_db.last_retrieved_date)):
             self.clean_up(wiki_article_db)
-            return
         if wiki_article_db == None or self.is_expired(wiki_article_db.last_retrieved_date):
             wiki_article_db = self.init_new_article(wiki_page)
             self.write_article_to_db(wiki_article_db)
             for new_section in wiki_page.sections:
                 self.preorder_section(wiki_article_db, new_section, None)
-            #self.mark_completed(wiki_article_db)
+            self.mark_completed(wiki_article_db)
 
 if __name__ == '__main__':
     mode = sys.argv[1]
+    etl = WikiRadioETL()
     if mode == "download":
         doc_name = sys.argv[2]
-        etl = WikiRadioETL()
         etl.download_article(doc_name)
+    elif mode == "search":
+        keyword = sys.argv[2]
+        title = etl.search_online(keyword)
+        print(title)
