@@ -4,12 +4,13 @@ import win32com.client, urllib.parse, requests
 from bs4 import BeautifulSoup
 
 class WikipediaArticle:
-    def __init__(self, id, title, url, last_retrieved_date, status):
+    def __init__(self, id, title, url, last_retrieved_date, status, version):
         self.id: str = id
         self.title: str = title
         self.url: str = url
         self.last_retrieved_date: datetime = last_retrieved_date
         self.status = status
+        self.version = version
 
     @property
     def last_retrieved_date_str(self) -> str:
@@ -62,17 +63,17 @@ class WikiRadioETL:
     def convert_tts(self, id: str, path: str):
         try:
             mp3path = path.replace(".WAV", ".MP3")
-            subprocess.call(["ffmpeg", "-i", path, "-acodec", "libmp3lame", "-b:a", "32k" , "-ac", "1", "-ar", "11025", mp3path])
+            subprocess.call(["ffmpeg", "-i", path, "-acodec", "libmp3lame", "-b:a", "32k" , "-ac", "1", "-ar", "11025", mp3path], stdout=open(os.devnull, 'wb'))
             if(os.path.exists(mp3path)):
                 os.remove(path)
         except:
-            print("Cannot find")
+            pass
 
     def sql_data_to_article(self, data) -> WikipediaArticle:
-        return WikipediaArticle(data[0], data[1], data[2], data[3], data[4])
+        return WikipediaArticle(data[0], data[1], data[2], data[3], data[4], data[5])
 
     def from_url(self, url) -> WikipediaArticle:
-        query: str = "SELECT id, title, url, last_retrieved_date, status FROM WIKIPEDIA_ARTICLES WHERE url=%s"
+        query: str = "SELECT id, title, url, last_retrieved_date, status, version FROM WIKIPEDIA_ARTICLES WHERE url=%s ORDER BY version desc"
         cur = self.con.cursor()
         cur.execute(query, [url])
         rows = cur.fetchall()
@@ -90,13 +91,14 @@ class WikiRadioETL:
 
     def write_article_to_db(self, wiki_article: WikipediaArticle):
         cur = self.con.cursor()    
-        query: str = "INSERT INTO WIKIPEDIA_ARTICLES (id, title, url, last_retrieved_date, status) VALUES (%s, %s, %s, %s, %s)"
+        query: str = "INSERT INTO WIKIPEDIA_ARTICLES (id, title, url, last_retrieved_date, status, version) VALUES (%s, %s, %s, %s, %s, %s)"
         cur = self.con.cursor()
         cur.execute(query, [wiki_article.id, 
                             wiki_article.title, 
                             wiki_article.url, 
                             wiki_article.last_retrieved_date_str, 
-                            wiki_article.status])
+                            wiki_article.status,
+                            wiki_article.version])
         self.con.commit()
         cur.close()
 
@@ -131,15 +133,14 @@ class WikiRadioETL:
     def is_expired(self, cur_date: datetime) -> bool:
         return cur_date < datetime.datetime.now() - datetime.timedelta(weeks=self.expire_in_weeks)
 
-    def init_new_article(self, wiki_page: wikipediaapi.WikipediaPage) -> WikipediaArticle:
-        return WikipediaArticle(str(uuid.uuid1()), wiki_page.title, wiki_page.fullurl, datetime.datetime.now(), 'UNINIT')
+    def init_new_article(self, wiki_page: wikipediaapi.WikipediaPage, version: int) -> WikipediaArticle:
+        return WikipediaArticle(str(uuid.uuid1()), wiki_page.title, wiki_page.fullurl, datetime.datetime.now(), 'UNINIT', version)
     
     def clean_up(self, wiki_article: WikipediaArticle):
         cur = self.con.cursor()
         query: str = """SELECT id, location_directory FROM WIKIPEDIA_SECTIONS WHERE wikipedia_article_id=%s"""
         cur.execute(query, [wiki_article.id])
         rows = cur.fetchall()
-        print(len(rows))
         for row in rows:
             cur_fname = row[1] + "/" + row[0].replace("-", "_") + ".MP3"
             if os.path.exists(cur_fname):
@@ -162,36 +163,43 @@ class WikiRadioETL:
         all_links = soup.find_all('a', {"data-serp-pos": "0"})
         if len(all_links) > 0:
             return all_links[0].get_text()
-        all_links = soup.find_all('span', {"class": "mw-page-title-main"})
+        #all_links = soup.find_all('span', {"class": "mw-page-title-main"})
+        all_links = soup.find_all('h1', {"id": "firstHeading"})
         if len(all_links) > 0:
             return all_links[0].get_text()
-        return None
+        return None        
 
-    def download_article(self, name):
+    def download_article(self, name) -> WikipediaArticle:
+        version = 1
         wiki = wikipediaapi.Wikipedia('Wikiradio', 'en')
         wiki_page = wiki.page(name)
         if not wiki_page.exists():
             name = self.search_online(name)
             wiki_page = wiki.page(name)
             if not wiki_page.exists():
-                return
+                return None
         wiki_article_db = self.from_url(wiki_page.fullurl)
-        if wiki_article_db != None and (wiki_article_db.status == 'UNINIT' or self.is_expired(wiki_article_db.last_retrieved_date)):
+        if wiki_article_db != None and (wiki_article_db.status == 'UNINIT'):
             self.clean_up(wiki_article_db)
-        if wiki_article_db == None or self.is_expired(wiki_article_db.last_retrieved_date):
-            wiki_article_db = self.init_new_article(wiki_page)
+        if wiki_article_db != None and self.is_expired(wiki_article_db.last_retrieved_date):
+            version = wiki_article_db.version + 1
+            wiki_article_db = None
+        if wiki_article_db == None:
+            wiki_article_db = self.init_new_article(wiki_page, version)
             self.write_article_to_db(wiki_article_db)
             for new_section in wiki_page.sections:
                 self.preorder_section(wiki_article_db, new_section, None)
             self.mark_completed(wiki_article_db)
+        return wiki_article_db
 
 if __name__ == '__main__':
     mode = sys.argv[1]
     etl = WikiRadioETL()
     if mode == "download":
         doc_name = sys.argv[2]
-        etl.download_article(doc_name)
+        article = etl.download_article(doc_name)
+        stdout = "~{}~{}".format(article.id, article.version) if article != None else "~~~"
+        print(stdout)
     elif mode == "search":
         keyword = sys.argv[2]
         title = etl.search_online(keyword)
-        print(title)

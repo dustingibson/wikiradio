@@ -1,0 +1,19 @@
+{
+  "name": "wiki-radio",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "connect-busboy": "^1.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.1",
+    "fs-extra": "^11.2.0",
+    "mysql": "^2.18.1",
+    "mysql2": "^3.11.3"
+  }
+}
