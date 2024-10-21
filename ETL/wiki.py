@@ -45,7 +45,7 @@ class WikiRadioETL:
         self.engine = pyttsx3.init()
         self.voices = [0, 1]
         self.voice = self.voices[random.randint(0, len(self.voices) - 1)]
-        self.banned_sections = [""]
+        self.banned_sections = ["See also", "Further reading"]
 
     def save_voice(self, id: str, content: str):
         if content != '' and content != None:

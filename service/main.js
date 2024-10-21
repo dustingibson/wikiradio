@@ -91,11 +91,11 @@ async function addNewArticleForUser(userId, wikiId) {
 }
 
 async function getAllArticlesForUser(userId, wikiId) {
-    const query = `SELECT wa.id 'article_id', ws.id 'section_id', wa.title 'article_title', ws.title 'section_title', up.audio_progress 'audio_progress', wa.url 'url', wa.version 'version'
+    const query = `SELECT wa.id 'article_id', ws.id 'section_id', wa.title 'article_title', ws.title 'section_title', up.audio_progress 'audio_progress', wa.url 'url', wa.version 'version', up.status 'status'
         FROM wikipedia_articles wa
         JOIN wikipedia_sections ws ON ws.wikipedia_article_id = wa.id
         JOIN users_progress up ON up.wikipedia_section_id = ws.id
-        WHERE up.user_id = ? and wa.id=? and up.status != 'COMPLETE' and content != ''
+        WHERE up.user_id = ? and wa.id=? and content != ''
         ORDER BY ws.order_index asc`;
     const con = await connect();
     const results = (await con.query(query, [userId, wikiId]))[0].map(res => {
@@ -106,7 +106,8 @@ async function getAllArticlesForUser(userId, wikiId) {
             section_title: res['section_title'],
             audio_progress: res['audio_progress'],
             url: res['url'],
-            version: res['version']
+            version: res['version'],
+            status: res['status']
         }
     });
     con.close();
@@ -217,7 +218,10 @@ app.put('/audioProgress', async (req, res) => {
         const progress = req.query.progress;
         const userId = await getUserId(username);
         await updateSeekerProgress(userId, sectionId, progress);
-        res.sendStatus(200);
+        res.send({
+            status: 1,
+            messsage: ''
+        });
     } catch(err) {
         res.sendStatus(500);
     }
@@ -233,7 +237,10 @@ app.put('/overallProgress', async (req, res) => {
         const status = req.query.status;
         const userId = await getUserId(username);
         await updateOverallProgress(userId, sectionId, status);
-        res.sendStatus(200);
+        res.send({
+            status: 1,
+            messsage: ''
+        });
     } catch(err) {
         res.sendStatus(500);
     }
