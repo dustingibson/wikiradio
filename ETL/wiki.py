@@ -10,6 +10,7 @@ class WikipediaArticle:
         self.url: str = url
         self.last_retrieved_date: datetime = last_retrieved_date
         self.status = status
+
         self.version = version
 
     @property
@@ -45,7 +46,7 @@ class WikiRadioETL:
         self.engine = pyttsx3.init()
         self.voices = [0, 1]
         self.voice = self.voices[random.randint(0, len(self.voices) - 1)]
-        self.banned_sections = ["See also", "Further reading"]
+        self.banned_sections = ["See also", "Further reading", "Notes", "Footnotes", "References"]
 
     def save_voice(self, id: str, content: str):
         if content != '' and content != None:
@@ -121,7 +122,7 @@ class WikiRadioETL:
         cur.close()
 
     def preorder_section(self, page: WikipediaArticle, section: wikipediaapi.WikipediaPageSection, parent_id: str):
-        if (section == None):
+        if (section == None or section.title in self.banned_sections):
             return
         self.tree_order = self.tree_order + 1
         section_db = WikipediaSection(str(uuid.uuid1()), page.id, parent_id, section.title, section.text, self.tree_order)
@@ -169,6 +170,12 @@ class WikiRadioETL:
             return all_links[0].get_text()
         return None        
 
+    def add_summary(self, wiki_page: wikipediaapi.WikipediaPage, wiki_article_db: WikipediaArticle):
+        summary_content = wiki_page.summary
+        section_db = WikipediaSection(str(uuid.uuid1()), wiki_article_db.id, None, 'Summary', summary_content, 0)
+        self.write_section_to_db(section_db)
+        self.save_voice(section_db.id, section_db.content)
+
     def download_article(self, name) -> WikipediaArticle:
         version = 1
         wiki = wikipediaapi.Wikipedia('Wikiradio', 'en')
@@ -187,10 +194,18 @@ class WikiRadioETL:
         if wiki_article_db == None:
             wiki_article_db = self.init_new_article(wiki_page, version)
             self.write_article_to_db(wiki_article_db)
+            self.add_summary(wiki_page, wiki_article_db)
             for new_section in wiki_page.sections:
                 self.preorder_section(wiki_article_db, new_section, None)
             self.mark_completed(wiki_article_db)
         return wiki_article_db
+    
+    def clear_everything(self):
+        # DELETE FROM USERS_PROGRESS;
+        # DELETE FROM WIKIPEDIA_SECTIONS;
+        # DELETE FROM WIKIPEDIA_ARTICLES;
+        # TODO: Implement 
+        pass
 
 if __name__ == '__main__':
     mode = sys.argv[1]
