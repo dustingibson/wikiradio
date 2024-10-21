@@ -115,14 +115,13 @@ async function getAllArticlesForUser(userId, wikiId) {
 }
 
 async function getMostRecent(userId) {
-    const query = `SELECT distinct t.article_id, t.article_title, t.version FROM (
-        SELECT  wa.id 'article_id', wa.title 'article_title', wa.version 'version', up.last_accessed_date
+    const query = `SELECT distinct  wa.id 'article_id', wa.title 'article_title', wa.version 'version', max(up.last_accessed_date)
         FROM wikipedia_articles wa
         JOIN wikipedia_sections ws on ws.wikipedia_article_id = wa.id
         JOIN users_progress up on up.wikipedia_section_id = ws.id
         WHERE user_id = ?
-        ORDER BY up.last_accessed_date desc
-        ) t LIMIT 10`;
+        GROUP BY  wa.id, wa.title, wa.version
+        ORDER BY max(up.last_accessed_date) desc LIMIT 20`;
     const con = await connect();
     const results = (await con.query(query, [userId]))[0].map(res => {
         return {

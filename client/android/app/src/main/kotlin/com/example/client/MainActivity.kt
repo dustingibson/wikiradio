@@ -1,4 +1,4 @@
-package com.example.reddit_radio
+package com.example.client
 
 import io.flutter.embedding.android.FlutterActivity
 
