@@ -46,8 +46,15 @@ async function getUser(username) {
     }
 }
 
+async function updateMostRecent(userId, sectionId) {
+    const query = `UPDATE USERS_PROGRESS SET last_accessed_date=? WHERE user_id=? AND wikipedia_section_id=?`;
+    const con = await connect();
+    await con.execute(query, [new Date(), userId, sectionId]);
+    con.close();
+}
+
 async function updateSeekerProgress(userId, sectionId, progress) {
-    const query = `UPDATE users_progress SET audio_progress=? WHERE user_id=? and wikipedia_section_id=?`;
+    const query = `UPDATE users_progress SET audio_progress=?, last_accessed_date=? WHERE user_id=? and wikipedia_section_id=?`;
     const con = await connect();
     await con.execute(query, [progress, userId, sectionId]);
     con.close();
@@ -182,9 +189,11 @@ app.get('/search', async (req, res) => {
         });
         // Probably not needed?
         const version = parseInt(output[2].trim());
+        const title = output[3].trim();
         const wikiId = output[1];
         res.send({
-            article_id: wikiId
+            article_id: wikiId,
+            article_title: title
         });
     } catch(err) {
         res.sendStatus(500);
@@ -244,6 +253,21 @@ app.put('/overallProgress', async (req, res) => {
         res.sendStatus(500);
     }
 });
+
+app.put('/lastAccessed', async (req, res) => {
+    try {
+        const sectionId = req.query.sectionId;
+        const username = req.query.username;
+        const userId = await getUserId(username);
+        await updateMostRecent(userId, sectionId);
+        res.send({
+            status: 1,
+            message: ''
+        })
+    } catch(err) {
+        res.sendStatus(500);
+    }
+})
 
 // ----------------------------------------------------------
 

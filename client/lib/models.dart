@@ -61,11 +61,13 @@ class WikiRecent {
 
 class WikiSearch {
   String? ArticleId;
+  String? ArticleTitle;
 
-  WikiSearch({this.ArticleId});
+  WikiSearch({this.ArticleId, this.ArticleTitle});
 
   WikiSearch.fromJson(Map<String, dynamic> json) {
     ArticleId = json['article_id'];
+    ArticleTitle = json['article_title'];
   }
 }
 

@@ -234,6 +234,7 @@ class MyAudioHandler extends BaseAudioHandler
     var curTrack = getCurrentTrack();
     if (curTrack != null) {
       try {
+        await api.setAudioProgress(username, curTrack.SectionId ?? "", 0);
         await _player.setAudioSource(api.getAudioUrl(curTrack.SectionId ?? ""));
         await _player.play();
       } catch (_) {
@@ -299,8 +300,20 @@ class MyAudioHandler extends BaseAudioHandler
     }
   }
 
-  dispose() {
+  disposePlayer() {
     _player.stop();
     _player.dispose();
+  }
+
+  dispose() {
+    var curTrack = getCurrentTrack();
+    if (curTrack != null) {
+      api
+          .setAudioProgress(
+              username, curTrack?.SectionId ?? "", _player.position.inSeconds)
+          .then((val) => {disposePlayer()});
+    } else {
+      disposePlayer();
+    }
   }
 }

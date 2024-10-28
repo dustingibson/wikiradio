@@ -213,7 +213,7 @@ if __name__ == '__main__':
     if mode == "download":
         doc_name = sys.argv[2]
         article = etl.download_article(doc_name)
-        stdout = "~{}~{}".format(article.id, article.version) if article != None else "~~~"
+        stdout = "~{}~{}~{}".format(article.id, article.version, article.title) if article != None else "~~~"
         print(stdout)
     elif mode == "search":
         keyword = sys.argv[2]

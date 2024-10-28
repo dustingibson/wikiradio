@@ -120,8 +120,8 @@ class _MyHomePageState extends State<MyHomePage>
                             child: new InkWell(
                                 child: new Text("${t.ArticleTitle}",
                                     textScaler: TextScaler.linear(1.35)),
-                                onTap: () =>
-                                    navigateToTracks(t.ArticleId ?? "")),
+                                onTap: () => navigateToTracks(t.ArticleId ?? "",
+                                    t?.ArticleTitle ?? "Tracks")),
                             color: Color.fromARGB(255, 152, 251, 152)),
                       ),
                     ]))
@@ -142,12 +142,12 @@ class _MyHomePageState extends State<MyHomePage>
     routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
   }
 
-  void navigateToTracks(String wikiId) {
+  void navigateToTracks(String wikiId, String title) {
     Navigator.push(
         context,
         CupertinoPageRoute(
             builder: (context) => TracksPage(
-                title: "Tracks",
+                title: title,
                 wikiId: wikiId,
                 username: usernameController.text,
                 audioProvider: audioProvider)));
@@ -191,7 +191,10 @@ class _MyHomePageState extends State<MyHomePage>
                         if (results?.ArticleId != "")
                           {
                             ScaffoldMessenger.of(context).showSnackBar(success),
-                            {navigateToTracks(results?.ArticleId ?? "Default")}
+                            {
+                              navigateToTracks(results?.ArticleId ?? "Default",
+                                  results?.ArticleTitle ?? "Tracks")
+                            }
                           }
                         else
                           {
