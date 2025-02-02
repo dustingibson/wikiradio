@@ -36,17 +36,20 @@ class WikipediaSection:
 class WikiRadioETL:
 
     def __init__(self):
-        config = configparser.ConfigParser()
-        config.read('config.ini')
-        self.con = mysql.connector.connect(host=config['sql']['host'], user=config['sql']['username'], password=config['sql']['password'], database='wikiradio',  auth_plugin='mysql_native_password')
-        self.machine_name = config['machine']['name']
-        self.directory = config['machine']['directory']
-        self.expire_in_weeks = 2
-        self.tree_order = 0
-        self.engine = pyttsx3.init()
-        self.voices = [0, 1]
-        self.voice = self.voices[random.randint(0, len(self.voices) - 1)]
-        self.banned_sections = ["See also", "Further reading", "Notes", "Footnotes", "References", "External links"]
+        try:
+            config = configparser.ConfigParser()
+            config.read('config.ini')
+            self.con =  mysql.connector.connect(host=config['sql']['host'], user=config['sql']['username'], password=config['sql']['password'], database='wikiradio',  auth_plugin='mysql_native_password')
+            self.machine_name = config['machine']['name']
+            self.directory = config['machine']['directory']
+            self.expire_in_weeks = 2
+            self.tree_order = 0
+            self.engine = pyttsx3.init()
+            self.voices = [0, 1]
+            self.voice = self.voices[random.randint(0, len(self.voices) - 1)]
+            self.banned_sections = ["See also", "Further reading", "Notes", "Footnotes", "References", "External links"]
+        except Exception as e:
+            pass
 
     def save_voice(self, id: str, content: str):
         if content != '' and content != None:
@@ -208,13 +211,17 @@ class WikiRadioETL:
         pass
 
 if __name__ == '__main__':
-    mode = sys.argv[1]
-    etl = WikiRadioETL()
-    if mode == "download":
-        doc_name = sys.argv[2]
-        article = etl.download_article(doc_name)
-        stdout = "~{}~{}~{}".format(article.id, article.version, article.title) if article != None else "~~~"
-        print(stdout)
-    elif mode == "search":
-        keyword = sys.argv[2]
-        title = etl.search_online(keyword)
+    try:
+        mode = sys.argv[1]
+        etl = WikiRadioETL()
+        if mode == "download":
+            doc_name = sys.argv[2]
+            article = etl.download_article(doc_name)
+            stdout = "~{}~{}~{}".format(article.id, article.version, article.title) if article != None else "~~~"
+            print(stdout)
+        elif mode == "search":
+            keyword = sys.argv[2]
+            title = etl.search_online(keyword)
+            print(title)
+    except Exception as e:
+        pass
