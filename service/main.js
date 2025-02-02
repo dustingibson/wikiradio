@@ -9,7 +9,7 @@ const app = express();
 const port = 3032
 
 app.use(busboy());
-app.use(express.static('./../data'));
+app.use(express.static(`${config['apppath']}/../data`));
 
 async function connect() {
     return mysql.createConnection({
@@ -56,7 +56,7 @@ async function updateMostRecent(userId, sectionId) {
 async function updateSeekerProgress(userId, sectionId, progress) {
     const query = `UPDATE users_progress SET audio_progress=?, last_accessed_date=? WHERE user_id=? and wikipedia_section_id=?`;
     const con = await connect();
-    await con.execute(query, [progress, userId, sectionId]);
+    await con.execute(query, [progress, new Date(), userId, sectionId]);
     con.close();
 }
 
@@ -183,7 +183,7 @@ app.get('/search', async (req, res) => {
         const username = req.query.username;
         // Call python program
         const output = await new Promise((resolve, reject) => {
-            exec(`cd ../ETL && python wiki.py download "${article}"`, (err, stdout, stderr) => {
+            exec(`cd "${config['etlpath']}" && python wiki.py download "${article}"`, (err, stdout, stderr) => {
                 resolve(stdout.split("~"));
             });
         });
@@ -209,12 +209,13 @@ app.get('/audio', async (req, res) => {
         const [results, field] = await con.query(query, [id]);
         con.close();
         if (results.length > 0) {
-            const path = results[0].location_directory + "/" + toFname(id) + ".MP3";
+            const path = `${config['apppath']}/${results[0].location_directory}/${toFname(id)}.MP3`.replace('/./', '/');
             res.download(path);
             return;
         }
         res.sendStatus(404);
     } catch(err) {
+        console.log(err);
         res.sendStatus(500);
     }
 });
@@ -231,6 +232,7 @@ app.put('/audioProgress', async (req, res) => {
             messsage: ''
         });
     } catch(err) {
+        console.log(err);
         res.sendStatus(500);
     }
 });
@@ -250,6 +252,7 @@ app.put('/overallProgress', async (req, res) => {
             messsage: ''
         });
     } catch(err) {
+        console.log(err);
         res.sendStatus(500);
     }
 });
