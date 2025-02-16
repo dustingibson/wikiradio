@@ -4,6 +4,7 @@ var busboy = require('connect-busboy');
 const mysql = require('mysql2/promise');
 const { exec } = require('child_process');
 var cors = require('cors')
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const port = 3032
@@ -141,6 +142,117 @@ async function getMostRecent(userId) {
     return results;
 }
 
+async function articleSearch(article) {
+    const output = await new Promise((resolve, reject) => {
+        const cmd = `cd "${config['etlpath']}" && python wiki.py download "${article}"`;
+        exec(cmd, (err, stdout, stderr) => {
+            if (err)
+                console.log(err);
+            resolve(stdout.split("~"));
+        });
+    });
+    return {
+        version: parseInt(output[2].trim()),
+        title: output[3].trim(),
+        id: output[1]
+    };
+}
+
+async function getPlaysetPlaylist(id) {
+    const get_query = `SELECT id, playset_id, wikipedia_article_id, play_order FROM PLAYSET_PLAYLIST WHERE id = ?`;
+    const con = await connect();
+    const results = (await con.query(get_query, [id]))[0].map(res => {
+        return {
+            id: res['id'],
+            playsetId: res['playset_id'],
+            wikipediaArticleId: res['wikipedia_article_id'],
+            playOrder: res['play_order']
+        }
+    });
+    con.close();
+    return results[0];
+}
+ 
+async function getPlaysetPlaylistFromPlaysetId(id) {
+    const get_query = `SELECT id, playset_id, wikipedia_article_id, play_order FROM PLAYSET_PLAYLIST WHERE playset_id = ?`;
+    const con = await connect();
+    const results = (await con.query(get_query, [id]))[0].map(res => {
+        return {
+            id: res['id'],
+            playsetId: res['playset_id'],
+            wikipediaArticleId: res['wikipedia_article_id'],
+            playOrder: res['play_order']
+        }
+    });
+    con.close();
+    return results;
+}
+
+async function getPlayset(id) {
+    const get_query = `SELECT id, name FROM playset WHERE id = ?`;
+    const playsetPlaylist = await getPlaysetPlaylistFromPlaysetId(id);
+    const con = await connect();
+    const results = (await con.query(get_query, [id]))[0].map(res => {
+        return {
+            id: res['id'],
+            name: res['name'],
+            playlist: playsetPlaylist
+        }
+    });
+    con.close();
+    return results;
+}
+
+async function createPlayset(username, name) {
+    const guid = uuidv4()
+    const userid = await getUserId(username);
+    const insert_query = `INSERT INTO PLAYSET (id, name, created_by) VALUES (?, ?, ?)`;
+    const con = await connect()
+    await con.execute(insert_query, [guid, name, userid]);
+    con.close();
+    return guid;
+}
+
+async function addToPlayset(playsetId, articleName, playOrder) {
+    const article_info = await articleSearch(articleName);
+    const insert_query = `INSERT INTO PLAYSET_PLAYLIST (playset_id, wikipedia_article_id, play_order) 
+        VALUES (?, ?, ?)`;
+    const con = await connect();
+    await con.execute(insert_query, [playsetId, article_info.id, playOrder]);
+    con.close();
+}
+
+async function addToPlaysetUserProgress(username, playsetPlaylistId) {
+    const playset = await getPlaysetPlaylist(playsetPlaylistId);
+    const userid = await getUserId(username);
+    const insert_query = `INSERT INTO PLAYSET_USERS_PROGRESS (user_id, playset_id, playset_playlist_id) VALUES (?, ?, ?)
+    ON DUPLICATE KEY UPDATE user_id = ?, playset_id = ? `;
+    const con = await connect();
+    await con.execute(insert_query, [userid, playset.playsetId, playsetPlaylistId, userid, playset.playsetId]);
+    con.close();
+}
+
+async function removeFromPlayset(playsetPlaylistId) {
+    const user_query = `DELETE PLAYSET_USERS_PROGRESS WHERE playset_playlist_id = ?`;
+    const query = `DELETE FROM PLAYSET_PLAYLIST WHERE id = ?`;
+    const con = await connect();
+    await con.execute(user_query, [playsetPlaylistId]);
+    await con.execute(query, [playsetPlaylistId]);
+    con.close();
+}
+
+async function removePlayset(playsetId) {
+    const playset_playlist_user = `  DELETE p FROM PLAYSET_USERS_PROGRESS  p
+        JOIN PLAYSET_PLAYLIST pl ON p.playset_playlist_id = pl.id
+        WHERE pl.playset_id = ?;`
+    const palyset_playlist_query = `DELETE FROM PALYSET_PLAYLIST WHERE playset_id = ?`;
+    const playset_query = `DELETE FROM PLAYSET WHERE id=?`;
+    await con.execute(playset_playlist_user, [playsetId]);
+    await con.execute(palyset_playlist_query, [playsetId]);
+    await con.execute(playset_query, [playsetId]);
+    con.close();
+}
+
 function toFname(str) {
     return str.replace(/-/g, "_");
 }
@@ -182,18 +294,10 @@ app.get('/search', async (req, res) => {
         const article = req.query.article;
         const username = req.query.username;
         // Call python program
-        const output = await new Promise((resolve, reject) => {
-            exec(`cd "${config['etlpath']}" && python wiki.py download "${article}"`, (err, stdout, stderr) => {
-                resolve(stdout.split("~"));
-            });
-        });
-        // Probably not needed?
-        const version = parseInt(output[2].trim());
-        const title = output[3].trim();
-        const wikiId = output[1];
+        const results = await articleSearch(article);
         res.send({
-            article_id: wikiId,
-            article_title: title
+            article_id: results.id,
+            article_title: results.title
         });
     } catch(err) {
         res.sendStatus(500);
@@ -268,17 +372,75 @@ app.put('/lastAccessed', async (req, res) => {
             message: ''
         })
     } catch(err) {
+        console.log(err);
         res.sendStatus(500);
     }
 })
 
 // ----------------------------------------------------------
 
-// TODO: Get playlist
+app.get('/playset', async (req ,res) => {
+    try {
+        res.send(await getPlayset(req.query.id));
+    } catch(err) {
+        res.sendStatus(500);
+    }
+});
 
-// TODO: Add to playlist
+app.get('/playsetPlaylist', async (req, res) => {
+    try {
+        res.send(await getPlaysetPlaylist(req.query.id));
+    } catch(err) {
+        res.send(status(500));
+    }
+});
 
-// TODO: Remove from playlist
+app.post('/playset', async (req, res) => {
+    try {
+        res.send({
+            status: 1,
+            id: await createPlayset(req.query.username, req.query.name)
+        });
+    } catch(err) {
+        res.sendStatus(500);
+    }
+});
+
+app.post('/playsetUsersProgress', async (req, res) => {
+    try {
+        await addToPlaysetUserProgress(req.query.username, parseInt(req.query.playsetPlaylistId));
+        res.send({status: 1});
+    } catch(err) {
+        res.sendStatus(500);
+    }
+});
+
+app.put('/playset', async (req, res) => {
+    try {
+        await addToPlayset(req.query.playsetId, req.query.articleName, req.query.playOrder);
+        res.send({status: 1});
+    } catch(err) {
+        res.sendStatus(500);
+    }
+});
+
+app.delete('/playsetPlaylist', async (req, res) => {
+    try {
+        await removeFromPlayset(req.query.playsetPlaylistId)
+        res.send({status: 1});
+    } catch(ex) {
+        res.sendStatus(500);
+    }
+});
+
+app.delete('/playset', async (req, res) => {
+    try {
+        await removePlayset(req.query.playsetId);
+        res.send({status: 1});
+    } catch(err) {
+        res.sendStatus(500);
+    }
+});
 
 //-----------------------------------------------------------
 
