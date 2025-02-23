@@ -201,14 +201,30 @@ async function getPlaysetPlaylistFromPlaysetId(id) {
     return results;
 }
 
-async function getPlayset(id) {
+async function getUserPlaysetProgress(playset_id, username) {
+    const userid = await getUserId(username);
+    const get_query = `SELECT playset_playlist_id FROM PLAYSET_USERS_PROGRESS WHERE playset_id =? AND user_id = ?`;
+    const con = await connect();
+    const results = (await con.query(get_query, [playset_id, userid]))[0].map(res => {return {
+        playsetPlaylistId: res['playset_playlist_id']}
+    });
+    con.close();
+    if (results.length <= 0)
+        return null;
+    else
+        return results[0].playsetPlaylistId;
+}
+
+async function getPlayset(id, username = null) {
     const get_query = `SELECT id, name FROM playset WHERE id = ?`;
     const playsetPlaylist = await getPlaysetPlaylistFromPlaysetId(id);
+    const currentPlaylist = username ? await getUserPlaysetProgress(id, username) : null;
     const con = await connect();
     const results = (await con.query(get_query, [id]))[0].map(res => {
         return {
             id: res['id'],
             name: res['name'],
+            currentPlaysetPlaylistId: username ? currentPlaylist : null,
             playlist: playsetPlaylist
         }
     });
@@ -464,7 +480,7 @@ app.get('/searchPlayset', async (req, res) => {
 
 app.get('/playset', async (req, res) => {
     try {
-        res.send(await getPlayset(req.query.id));
+        res.send(await getPlayset(req.query.id, req.query.username));
     } catch (err) {
         res.sendStatus(500);
     }
