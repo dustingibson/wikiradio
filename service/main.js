@@ -187,7 +187,7 @@ async function getPlaysetPlaylist(id) {
 }
 
 async function getPlaysetPlaylistFromPlaysetId(id) {
-    const get_query = `SELECT id, playset_id, wikipedia_article_id, play_order FROM PLAYSET_PLAYLIST WHERE playset_id = ?`;
+    const get_query = `SELECT id, playset_id, wikipedia_article_id, play_order FROM PLAYSET_PLAYLIST WHERE playset_id = ? ORDER BY play_order desc`;
     const con = await connect();
     const results = await Promise.all((await con.query(get_query, [id]))[0].map(async res => {
         return {
@@ -213,7 +213,7 @@ async function getPlayset(id) {
         }
     });
     con.close();
-    return results;
+    return results[0];
 }
 
 async function getUserPlayset(username) {
@@ -460,7 +460,7 @@ app.get('/playsetPlaylist', async (req, res) => {
     try {
         res.send(await getPlaysetPlaylist(req.query.id));
     } catch (err) {
-        res.send(status(500));
+        res.sendStatus(500);
     }
 });
 
@@ -504,7 +504,6 @@ app.delete('/userPlayset', async (req, res) => {
         res.sendStatus(500);
     }
 });
-
 
 app.post('/playsetUsersProgress', async (req, res) => {
     try {
