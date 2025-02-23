@@ -14,11 +14,11 @@ app.use(express.static(`${config['apppath']}/../data`));
 
 async function connect() {
     return mysql.createConnection({
-        host     : config['sql']['host'],
-        user     : config['sql']['username'],
-        password : config['sql']['password'],
-        database : 'wikiradio'
-        });
+        host: config['sql']['host'],
+        user: config['sql']['username'],
+        password: config['sql']['password'],
+        database: 'wikiradio'
+    });
 }
 
 app.use(cors());
@@ -28,7 +28,7 @@ async function setUser(username) {
     const con = await connect()
     await con.execute(insert_query, [username, 'default', new Date()]);
     con.close();
-} 
+}
 
 async function getUser(username) {
     const query = `SELECT id, username, provider, last_logged_in FROM USERS WHERE username=?`;
@@ -92,7 +92,7 @@ async function addNewArticleForUser(userId, wikiId) {
                         VALUES (?, ?, ?, ?, ?)`;
     const allSectionIds = await getAllSections(userId, wikiId);
     const con = await connect()
-    for(sectionId of allSectionIds) {
+    for (sectionId of allSectionIds) {
         await con.execute(insert_query, [userId, sectionId, 'INPROGRESS', 0, new Date()]);
     }
     con.close();
@@ -142,6 +142,19 @@ async function getMostRecent(userId) {
     return results;
 }
 
+async function getWikipediaArticle(articleId) {
+    const query = `SELECT id, title FROM WIKIPEDIA_ARTICLES WHERE id = ?`;
+    const con = await connect();
+    const results = (await con.query(query, [articleId]))[0].map(res => {
+        return {
+            id: res['id'],
+            title: res['title']
+        }
+    });
+    con.close();
+    return results[0];
+}
+
 async function articleSearch(article) {
     const output = await new Promise((resolve, reject) => {
         const cmd = `cd "${config['etlpath']}" && python wiki.py download "${article}"`;
@@ -161,29 +174,29 @@ async function articleSearch(article) {
 async function getPlaysetPlaylist(id) {
     const get_query = `SELECT id, playset_id, wikipedia_article_id, play_order FROM PLAYSET_PLAYLIST WHERE id = ?`;
     const con = await connect();
-    const results = (await con.query(get_query, [id]))[0].map(res => {
+    const results = (await con.query(get_query, [id]))[0].map(async res => {
         return {
             id: res['id'],
             playsetId: res['playset_id'],
-            wikipediaArticleId: res['wikipedia_article_id'],
+            wikipediaArticle: await getWikipediaArticle(res['wikipedia_article_id']),
             playOrder: res['play_order']
         }
     });
     con.close();
     return results[0];
 }
- 
+
 async function getPlaysetPlaylistFromPlaysetId(id) {
     const get_query = `SELECT id, playset_id, wikipedia_article_id, play_order FROM PLAYSET_PLAYLIST WHERE playset_id = ?`;
     const con = await connect();
-    const results = (await con.query(get_query, [id]))[0].map(res => {
+    const results = await Promise.all((await con.query(get_query, [id]))[0].map(async res => {
         return {
             id: res['id'],
             playsetId: res['playset_id'],
-            wikipediaArticleId: res['wikipedia_article_id'],
+            wikipediaArticle: await getWikipediaArticle(res['wikipedia_article_id']),
             playOrder: res['play_order']
         }
-    });
+    }));
     con.close();
     return results;
 }
@@ -201,6 +214,53 @@ async function getPlayset(id) {
     });
     con.close();
     return results;
+}
+
+async function getUserPlayset(username) {
+    const userid = await getUserId(username);
+    const userPlayset = `SELECT up.id 'users_playset_id', ps.id 'playset_id', name, last_accessed_date FROM USERS_PLAYSET up
+                        JOIN PLAYSET ps ON ps.id = up.playset_id
+                        WHERE user_id = ?
+                        ORDER BY last_accessed_date LIMIT 20`;
+    const con = await connect();
+    const results = (await con.query(userPlayset, [userid]))[0].map((res => {
+        return {
+            usersPlaysetId: res['users_playset_id'],
+            playsetId: res['playset_id'],
+            name: res['name'],
+        }
+    }));
+    con.close();
+    return results;
+}
+
+
+async function searchPlayset(keyword) {
+    const get_query = `SELECT id, name FROM playset WHERE name like ? LIMIT 20`;
+    const con = await connect();
+    const results = (await con.query(get_query, [`%${keyword}%`]))[0].map(res => {
+        return {
+            id: res['id'],
+            name: res['name']
+        }
+    });
+    con.close();
+    return results;
+}
+
+async function createUserPlayset(username, playset_id) {
+    const userid = await getUserId(username);
+    const insert_query = `INSERT INTO USERS_PLAYSET (user_id, playset_id, last_accessed_date) values (?, ?, ?)`;
+    const con = await connect();
+    await con.execute(insert_query, [userid, playset_id, new Date()]);
+    con.close();
+}
+
+async function removeUserPlayset(id) {
+    const delete_query = `DELETE FROM USERS_PLAYSET WHERE id = ?`;
+    const con = await connect();
+    await con.execute(delete_query, [id]);
+    con.close();
 }
 
 async function createPlayset(username, name) {
@@ -233,7 +293,7 @@ async function addToPlaysetUserProgress(username, playsetPlaylistId) {
 }
 
 async function removeFromPlayset(playsetPlaylistId) {
-    const user_query = `DELETE PLAYSET_USERS_PROGRESS WHERE playset_playlist_id = ?`;
+    const user_query = `DELETE FROM PLAYSET_USERS_PROGRESS WHERE playset_playlist_id = ?`;
     const query = `DELETE FROM PLAYSET_PLAYLIST WHERE id = ?`;
     const con = await connect();
     await con.execute(user_query, [playsetPlaylistId]);
@@ -245,8 +305,9 @@ async function removePlayset(playsetId) {
     const playset_playlist_user = `  DELETE p FROM PLAYSET_USERS_PROGRESS  p
         JOIN PLAYSET_PLAYLIST pl ON p.playset_playlist_id = pl.id
         WHERE pl.playset_id = ?;`
-    const palyset_playlist_query = `DELETE FROM PALYSET_PLAYLIST WHERE playset_id = ?`;
+    const palyset_playlist_query = `DELETE FROM PLAYSET_PLAYLIST WHERE playset_id = ?`;
     const playset_query = `DELETE FROM PLAYSET WHERE id=?`;
+    const con = await connect();
     await con.execute(playset_playlist_user, [playsetId]);
     await con.execute(palyset_playlist_query, [playsetId]);
     await con.execute(playset_query, [playsetId]);
@@ -265,7 +326,7 @@ app.get('/article', async (req, res) => {
         await addNewArticleForUser(userId, wikiId);
         const results = await getAllArticlesForUser(userId, wikiId);
         res.send(results);
-    } catch(ex) {
+    } catch (ex) {
         res.sendStatus(500);
     }
 });
@@ -274,7 +335,7 @@ app.get('/user', async (req, res) => {
     try {
         const username = req.query.username;
         res.send(await getUser(username));
-    } catch(ex) {
+    } catch (ex) {
         res.sendStatus(500);
     }
 });
@@ -284,7 +345,7 @@ app.get('/recent', async (req, res) => {
         const username = req.query.username;
         const userId = await getUserId(username);
         res.send(await getMostRecent(userId));
-    } catch(ex) {
+    } catch (ex) {
         res.sendStatus(500);
     }
 });
@@ -299,7 +360,7 @@ app.get('/search', async (req, res) => {
             article_id: results.id,
             article_title: results.title
         });
-    } catch(err) {
+    } catch (err) {
         res.sendStatus(500);
     }
 });
@@ -318,7 +379,7 @@ app.get('/audio', async (req, res) => {
             return;
         }
         res.sendStatus(404);
-    } catch(err) {
+    } catch (err) {
         console.log(err);
         res.sendStatus(500);
     }
@@ -335,7 +396,7 @@ app.put('/audioProgress', async (req, res) => {
             status: 1,
             messsage: ''
         });
-    } catch(err) {
+    } catch (err) {
         console.log(err);
         res.sendStatus(500);
     }
@@ -355,7 +416,7 @@ app.put('/overallProgress', async (req, res) => {
             status: 1,
             messsage: ''
         });
-    } catch(err) {
+    } catch (err) {
         console.log(err);
         res.sendStatus(500);
     }
@@ -371,7 +432,7 @@ app.put('/lastAccessed', async (req, res) => {
             status: 1,
             message: ''
         })
-    } catch(err) {
+    } catch (err) {
         console.log(err);
         res.sendStatus(500);
     }
@@ -379,10 +440,18 @@ app.put('/lastAccessed', async (req, res) => {
 
 // ----------------------------------------------------------
 
-app.get('/playset', async (req ,res) => {
+app.get('/searchPlayset', async (req, res) => {
+    try {
+        res.send(await searchPlayset(req.query.keyword));
+    } catch (err) {
+        res.sendStatus(500);
+    }
+});
+
+app.get('/playset', async (req, res) => {
     try {
         res.send(await getPlayset(req.query.id));
-    } catch(err) {
+    } catch (err) {
         res.sendStatus(500);
     }
 });
@@ -390,7 +459,7 @@ app.get('/playset', async (req ,res) => {
 app.get('/playsetPlaylist', async (req, res) => {
     try {
         res.send(await getPlaysetPlaylist(req.query.id));
-    } catch(err) {
+    } catch (err) {
         res.send(status(500));
     }
 });
@@ -401,16 +470,47 @@ app.post('/playset', async (req, res) => {
             status: 1,
             id: await createPlayset(req.query.username, req.query.name)
         });
-    } catch(err) {
+    } catch (err) {
         res.sendStatus(500);
     }
 });
 
+app.get('/userPlayset', async (req, res) => {
+    try {
+        res.send(await getUserPlayset(req.query.username));
+    } catch (err) {
+        res.sendStatus(500);
+    }
+});
+
+app.post('/userPlayset', async (req, res) => {
+    try {
+        res.send({
+            status: 1,
+            id: await createUserPlayset(req.query.username, req.query.playsetId)
+        });
+    } catch (err) {
+        res.sendStatus(500);
+    }
+});
+
+app.delete('/userPlayset', async (req, res) => {
+    try {
+        res.send({
+            status: 1,
+            id: await removeUserPlayset(req.query.id)
+        });
+    } catch (err) {
+        res.sendStatus(500);
+    }
+});
+
+
 app.post('/playsetUsersProgress', async (req, res) => {
     try {
         await addToPlaysetUserProgress(req.query.username, parseInt(req.query.playsetPlaylistId));
-        res.send({status: 1});
-    } catch(err) {
+        res.send({ status: 1 });
+    } catch (err) {
         res.sendStatus(500);
     }
 });
@@ -418,17 +518,17 @@ app.post('/playsetUsersProgress', async (req, res) => {
 app.put('/playset', async (req, res) => {
     try {
         await addToPlayset(req.query.playsetId, req.query.articleName, req.query.playOrder);
-        res.send({status: 1});
-    } catch(err) {
+        res.send({ status: 1 });
+    } catch (err) {
         res.sendStatus(500);
     }
 });
 
 app.delete('/playsetPlaylist', async (req, res) => {
     try {
-        await removeFromPlayset(req.query.playsetPlaylistId)
-        res.send({status: 1});
-    } catch(ex) {
+        await removeFromPlayset(parseInt(req.query.playsetPlaylistId));
+        res.send({ status: 1 });
+    } catch (ex) {
         res.sendStatus(500);
     }
 });
@@ -436,8 +536,8 @@ app.delete('/playsetPlaylist', async (req, res) => {
 app.delete('/playset', async (req, res) => {
     try {
         await removePlayset(req.query.playsetId);
-        res.send({status: 1});
-    } catch(err) {
+        res.send({ status: 1 });
+    } catch (err) {
         res.sendStatus(500);
     }
 });
