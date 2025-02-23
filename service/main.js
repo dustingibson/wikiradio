@@ -316,9 +316,9 @@ async function addToPlaysetUserProgress(username, playsetPlaylistId) {
     const playset = await getPlaysetPlaylist(playsetPlaylistId);
     const userid = await getUserId(username);
     const insert_query = `INSERT INTO PLAYSET_USERS_PROGRESS (user_id, playset_id, playset_playlist_id) VALUES (?, ?, ?)
-    ON DUPLICATE KEY UPDATE user_id = ?, playset_id = ? `;
+    ON DUPLICATE KEY UPDATE user_id = ?, playset_id = ?, playset_playlist_id = ? `;
     const con = await connect();
-    await con.execute(insert_query, [userid, playset.playsetId, playsetPlaylistId, userid, playset.playsetId]);
+    await con.execute(insert_query, [userid, playset.playsetId, playsetPlaylistId, userid, playset.playsetId, playsetPlaylistId]);
     con.close();
 }
 
