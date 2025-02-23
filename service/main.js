@@ -187,7 +187,7 @@ async function getPlaysetPlaylist(id) {
 }
 
 async function getPlaysetPlaylistFromPlaysetId(id) {
-    const get_query = `SELECT id, playset_id, wikipedia_article_id, play_order FROM PLAYSET_PLAYLIST WHERE playset_id = ? ORDER BY play_order desc`;
+    const get_query = `SELECT id, playset_id, wikipedia_article_id, play_order FROM PLAYSET_PLAYLIST WHERE playset_id = ? ORDER BY play_order asc`;
     const con = await connect();
     const results = await Promise.all((await con.query(get_query, [id]))[0].map(async res => {
         return {
@@ -215,6 +215,20 @@ async function getPlayset(id) {
     con.close();
     return results[0];
 }
+
+async function getNextPlaysetPlaylist(id, username) {
+    const curPlaysetPlaylist = await getPlaysetPlaylist(id);
+    const curPlayset = await getPlayset(curPlaysetPlaylist.playsetId);
+    const curPlaylist = curPlayset.playlist;
+    const curIndex = curPlaylist.indexOf( curPlaylist.find(c => c.id === id ) );
+    if (curIndex + 1 >= curPlaylist.length) {
+        await addToPlaysetUserProgress(username, curPlaylist[0].id)
+        return curPlaylist[0];
+    }
+    await addToPlaysetUserProgress(username, curPlaylist[cyurIndex + 1].id)
+    return curPlaylist[curIndex + 1];
+}
+
 
 async function getUserPlayset(username) {
     const userid = await getUserId(username);
@@ -464,6 +478,15 @@ app.get('/playsetPlaylist', async (req, res) => {
     }
 });
 
+app.get('/nextPlaysetPlaylist', async (req, res) => {
+    try {
+        res.send(await getNextPlaysetPlaylist(parseInt(req.query.id), req.query.username));
+    } catch (err) {
+        res.sendStatus(500);
+    }
+});
+
+
 app.post('/playset', async (req, res) => {
     try {
         res.send({
@@ -482,6 +505,7 @@ app.get('/userPlayset', async (req, res) => {
         res.sendStatus(500);
     }
 });
+
 
 app.post('/userPlayset', async (req, res) => {
     try {
