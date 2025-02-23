@@ -225,7 +225,7 @@ async function getNextPlaysetPlaylist(id, username) {
         await addToPlaysetUserProgress(username, curPlaylist[0].id)
         return curPlaylist[0];
     }
-    await addToPlaysetUserProgress(username, curPlaylist[cyurIndex + 1].id)
+    await addToPlaysetUserProgress(username, curPlaylist[curIndex + 1].id)
     return curPlaylist[curIndex + 1];
 }
 
