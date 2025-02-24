@@ -4,7 +4,9 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/widgets.dart';
 import 'package:wiki_radio/api.dart';
 import 'package:wiki_radio/audio_handler.dart';
+import 'package:wiki_radio/browse_playsets.dart';
 import 'package:wiki_radio/login.dart';
+import 'package:wiki_radio/playset.dart';
 import 'package:wiki_radio/tracks.dart';
 import 'models.dart';
 import 'player.dart';
@@ -19,7 +21,9 @@ void main() {
   runApp(const MyApp());
 }
 
-final RouteObserver<PageRoute> routeObserver = new RouteObserver<PageRoute>();
+enum ListMode { playlist, playset }
+
+final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -56,8 +60,10 @@ class _MyHomePageState extends State<MyHomePage>
   StreamController<bool> usernameChangeController = new StreamController();
   StreamController<int> toNextController = new StreamController();
   bool isSearchLoading = false;
+  ListMode listMode = ListMode.playlist;
   ApiPlaylist api = new ApiPlaylist();
   List<WikiRecent> recent = [];
+  List<WikiUserPlayset> playsets = [];
   late Column column;
   late AnimationController animationController;
 
@@ -86,8 +92,15 @@ class _MyHomePageState extends State<MyHomePage>
                     }),
                 api.getUser(usernameController.text).then((userResults) => {
                       api.getRecent(userResults?.Username ?? "default").then(
-                          (recentResults) =>
-                              {recent = recentResults, this.setState(() => {})})
+                          (recentResults) => {
+                                recent = recentResults,
+                                this.setState(() => {})
+                              }),
+                      api
+                          .getUserPlaysets(userResults?.Username ?? "default")
+                          .then((value) => {
+                                {playsets = value, this.setState(() => {})}
+                              })
                     })
               }
           });
@@ -129,11 +142,36 @@ class _MyHomePageState extends State<MyHomePage>
             []);
   }
 
+  Table getPlaysetTables() {
+    return Table(
+        border: TableBorder.all(),
+        columnWidths: {0: FlexColumnWidth()},
+        children: playsets
+                .map((t) => TableRow(children: [
+                      TableCell(
+                        child: Container(
+                            padding: EdgeInsets.only(
+                                bottom: 10.0, top: 10.0, left: 4.0, right: 4.0),
+                            child: new InkWell(
+                                child: new Text("${t.Name}",
+                                    textScaler: TextScaler.linear(1.35)),
+                                onTap: () => navigateToPlayset(
+                                    t.PlaysetId ?? "", t?.Name ?? "Tracks")),
+                            color: Color.fromARGB(255, 36, 207, 158)),
+                      ),
+                    ]))
+                .toList() ??
+            []);
+  }
+
   @override
   void didPopNext() {
     super.didPopNext();
     api.getRecent(usernameController.text).then(
         (recentResults) => {recent = recentResults, this.setState(() => {})});
+    api.getUserPlaysets(usernameController.text).then((value) => {
+          {playsets = value, this.setState(() => {})}
+        });
   }
 
   @override
@@ -147,20 +185,61 @@ class _MyHomePageState extends State<MyHomePage>
         context,
         CupertinoPageRoute(
             builder: (context) => TracksPage(
-                title: title,
-                wikiId: wikiId,
-                username: usernameController.text,
-                audioProvider: audioProvider)));
+                  title: title,
+                  wikiId: wikiId,
+                  username: usernameController.text,
+                  audioProvider: audioProvider,
+                  playsetPlaylist: null,
+                )));
+  }
+
+  void navigateToPlayset(String playsetId, String palysetName) {
+    Navigator.push(
+        context,
+        CupertinoPageRoute(
+            builder: (context) => PlaysetPage(
+                  playsetId: playsetId,
+                  playsetName: palysetName,
+                  username: usernameController.text,
+                  audioProvider: audioProvider,
+                  playsetPlaylistId: null,
+                )));
+  }
+
+  void navigateToBrowsePlaysets() {
+    Navigator.push(
+        context,
+        CupertinoPageRoute(
+            builder: (context) => BrowsePlaysetPage(
+                  username: usernameController.text,
+                )));
+  }
+
+  Column buildSegemntedButton() {
+    return Column(children: [
+      SegmentedButton<ListMode>(
+        segments: const <ButtonSegment<ListMode>>[
+          ButtonSegment<ListMode>(
+              value: ListMode.playlist, label: Text("Playlist")),
+          ButtonSegment(value: ListMode.playset, label: Text("Playset"))
+        ],
+        selected: <ListMode>{listMode},
+        onSelectionChanged: (Set<ListMode> newSelection) {
+          setState(() {
+            listMode = newSelection.first;
+          });
+        },
+      )
+    ]);
   }
 
   Column buildSearchButton() {
     const cannotFindPage = SnackBar(content: const Text('Cannot find page'));
-
     const errorPage = SnackBar(content: const Text('Error searching page'));
-
     const success = SnackBar(content: const Text('Page found'));
 
     return Column(children: [
+      //  Row(children: [
       Container(
         child: TextField(
             autofocus: true,
@@ -171,43 +250,56 @@ class _MyHomePageState extends State<MyHomePage>
         padding:
             EdgeInsets.only(left: 10.0, right: 10.0, top: 5.0, bottom: 5.0),
       ),
-      FilledButton(
-          child: Container(
-            child: Text('Get'),
-            padding:
-                EdgeInsets.only(left: 10.0, right: 10.0, top: 5.0, bottom: 5.0),
-          ),
-          style: ButtonStyle(
-              backgroundColor: WidgetStatePropertyAll<Color>(Colors.green),
-              minimumSize: WidgetStatePropertyAll<Size>(Size(100.0, 50.0))),
-          onPressed: () {
-            if (searchController.text != "") {
-              isSearchLoading = true;
-              setState(() => {});
-              api
-                  .getSearch(usernameController.text, searchController.text)
-                  .then((results) => {
-                        isSearchLoading = false,
-                        if (results?.ArticleId != "")
-                          {
-                            ScaffoldMessenger.of(context).showSnackBar(success),
+      Row(children: [
+        FilledButton(
+            child: Container(
+              child: Text('Get'),
+              padding: EdgeInsets.only(
+                  left: 10.0, right: 10.0, top: 5.0, bottom: 5.0),
+            ),
+            style: ButtonStyle(
+                backgroundColor: WidgetStatePropertyAll<Color>(Colors.green),
+                minimumSize: WidgetStatePropertyAll<Size>(Size(100.0, 50.0))),
+            onPressed: () {
+              if (searchController.text != "") {
+                isSearchLoading = true;
+                setState(() => {});
+                api
+                    .getSearch(usernameController.text, searchController.text)
+                    .then((results) => {
+                          isSearchLoading = false,
+                          if (results?.ArticleId != "")
                             {
-                              navigateToTracks(results?.ArticleId ?? "Default",
-                                  results?.ArticleTitle ?? "Tracks")
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(success),
+                              {
+                                navigateToTracks(
+                                    results?.ArticleId ?? "Default",
+                                    results?.ArticleTitle ?? "Tracks")
+                              }
                             }
-                          }
-                        else
-                          {
-                            ScaffoldMessenger.of(context)
-                                .showSnackBar(cannotFindPage)
-                          }
-                      })
-                  .catchError((err) => {
-                        isSearchLoading = false,
-                        ScaffoldMessenger.of(context).showSnackBar(errorPage)
-                      });
-            }
-          })
+                          else
+                            {
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(cannotFindPage)
+                            }
+                        })
+                    .catchError((err) => {
+                          isSearchLoading = false,
+                          ScaffoldMessenger.of(context).showSnackBar(errorPage)
+                        });
+              }
+            }),
+        FilledButton(
+            onPressed: () {
+              navigateToBrowsePlaysets();
+            },
+            child: Container(child: Text('Browse Playsets')),
+            style: ButtonStyle(
+                backgroundColor: WidgetStatePropertyAll<Color>(Colors.green),
+                minimumSize: WidgetStatePropertyAll<Size>(Size(100.0, 50.0)))),
+        buildSegemntedButton()
+      ])
     ]);
   }
 
@@ -247,7 +339,8 @@ class _MyHomePageState extends State<MyHomePage>
       ));
     }
     column.children.add(buildSearchButton());
-    column.children.add(getTables());
+    if (listMode == ListMode.playlist) column.children.add(getTables());
+    if (listMode == ListMode.playset) column.children.add(getPlaysetTables());
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,

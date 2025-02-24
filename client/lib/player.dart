@@ -8,11 +8,7 @@ import 'package:just_audio/just_audio.dart';
 // Credit mostly AudioPlayers example package for skeleton. Replaced with just_audio
 
 class PlayerWidget extends StatefulWidget {
-  const PlayerWidget(
-      {super.key,
-      required this.player,
-      required this.api,
-      required this.toNextController});
+  const PlayerWidget({super.key, required this.player, required this.api, required this.toNextController});
   final AudioPlayer player;
   final ApiPlaylist api;
   final StreamController<int> toNextController;
@@ -31,11 +27,9 @@ class _PlayerWidgetState extends State<PlayerWidget> {
 
   bool get _isPaused => !player.playing;
 
-  String get _durationText =>
-      player.duration?.toString().split('.').first ?? '';
+  String get _durationText => player.duration?.toString().split('.').first ?? '';
 
-  String get _positionText =>
-      player.position?.toString().split('.').first ?? '';
+  String get _positionText => player.position?.toString().split('.').first ?? '';
 
   AudioPlayer get player => widget.player;
 
@@ -118,10 +112,8 @@ class _PlayerWidgetState extends State<PlayerWidget> {
           value: (player.position != null &&
                   player.duration != null &&
                   player.position!.inMilliseconds > 0 &&
-                  player.position!.inMilliseconds <
-                      player.duration!.inMilliseconds)
-              ? player.position!.inMilliseconds /
-                  player.duration!.inMilliseconds
+                  player.position!.inMilliseconds < player.duration!.inMilliseconds)
+              ? player.position!.inMilliseconds / player.duration!.inMilliseconds
               : 0.0,
         ),
         Text(

@@ -82,3 +82,67 @@ class WikiResults {
     Message = json['message'];
   }
 }
+
+class WikiPlaysetPlaylist {
+  int? Id;
+  String? PlaysetId;
+  String? ArticleId;
+  String? ArticleTitle;
+
+  WikiPlaysetPlaylist(
+      {this.Id, this.PlaysetId, this.ArticleId, this.ArticleTitle});
+
+  WikiPlaysetPlaylist.fromJson(Map<String, dynamic> json) {
+    Id = json['id'];
+    PlaysetId = json['playsetId'];
+    ArticleId = json['wikipediaArticle']['id'];
+    ArticleTitle = json['wikipediaArticle']['title'];
+  }
+}
+
+class WikiPlaysetDetails {
+  String? Id;
+  String? Name;
+  List<WikiPlaysetPlaylist>? PlaysetPlaylist;
+  int? CurrentPlaysetPlaylistId;
+
+  WikiPlaysetDetails(
+      {this.Id,
+      this.Name,
+      this.PlaysetPlaylist,
+      this.CurrentPlaysetPlaylistId});
+
+  WikiPlaysetDetails.fromJson(Map<String, dynamic> json) {
+    CurrentPlaysetPlaylistId = json['currentPlaysetPlaylistId'];
+    Id = json['id'];
+    Name = json['name'];
+    PlaysetPlaylist = List<WikiPlaysetPlaylist>.from(
+        (json['playlist'] as List).map((x) => WikiPlaysetPlaylist.fromJson(x)));
+  }
+}
+
+class WikiPlaysetSearch {
+  String? Id;
+  String? Name;
+
+  WikiPlaysetSearch({this.Id, this.Name});
+
+  WikiPlaysetSearch.fromJson(Map<String, dynamic> json) {
+    Id = json['id'];
+    Name = json['name'];
+  }
+}
+
+class WikiUserPlayset {
+  int? UsersPlaysetId;
+  String? PlaysetId;
+  String? Name;
+
+  WikiUserPlayset({this.UsersPlaysetId, this.PlaysetId, this.Name});
+
+  WikiUserPlayset.fromJson(Map<String, dynamic> json) {
+    UsersPlaysetId = json['usersPlaysetId'];
+    PlaysetId = json['playsetId'];
+    Name = json['name'];
+  }
+}
