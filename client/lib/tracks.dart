@@ -296,7 +296,7 @@ class MyAudioHandler extends BaseAudioHandler
       if (index >= tracks.length) {
         index = 0;
         moveOnController.value =
-            "${curTrack.ArticleId} ${curTrack.ArticleTitle}";
+            "${curTrack.ArticleId} ${curTrack.ArticleTitle} ${curTrack.hashCode.toString()}";
       }
       curTrack.IsPlaying = false;
       tracks[index].IsPlaying = true;
