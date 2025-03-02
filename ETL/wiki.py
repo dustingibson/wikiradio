@@ -157,7 +157,7 @@ class WikiRadioETL:
         self.con.commit()
         cur.close()
 
-    def search_online(self, title):
+    def search_online(self, title: str):
         encoded_title: str = urllib.parse.quote_plus(title)
         url: str = """https://en.wikipedia.org/w/index.php?search={}&title=Special%3ASearch&ns0=1""".format(encoded_title)
         req = requests.get(url)
@@ -171,7 +171,14 @@ class WikiRadioETL:
         all_links = soup.find_all('h1', {"id": "firstHeading"})
         if len(all_links) > 0:
             return all_links[0].get_text()
-        return None        
+        return None
+
+    def get_name_from_url(self, url: str):
+        req = requests.get(url)
+        html_text = req.text
+        soup = BeautifulSoup(html_text, 'html.parser')
+        all_links = soup.find_all('span', {"class": "mw-page-title-main"})
+        return all_links[0].get_text()     
 
     def add_summary(self, wiki_page: wikipediaapi.WikipediaPage, wiki_article_db: WikipediaArticle):
         summary_content = wiki_page.summary
@@ -181,13 +188,15 @@ class WikiRadioETL:
 
     def download_article(self, name) -> WikipediaArticle:
         version = 1
+        if "https://" in name:
+            name = self.get_name_from_url(name)
         wiki = wikipediaapi.Wikipedia('Wikiradio', 'en')
         wiki_page = wiki.page(name)
         if not wiki_page.exists():
             name = self.search_online(name)
-            wiki_page = wiki.page(name)
-            if not wiki_page.exists():
-                return None
+        wiki_page = wiki.page(name)
+        if not wiki_page.exists():
+            return None
         wiki_article_db = self.from_url(wiki_page.fullurl)
         if wiki_article_db != None and (wiki_article_db.status == 'UNINIT'):
             self.clean_up(wiki_article_db)
