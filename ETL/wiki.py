@@ -47,7 +47,7 @@ class WikiRadioETL:
             self.engine = pyttsx3.init()
             self.voices = [0, 1]
             self.voice = self.voices[random.randint(0, len(self.voices) - 1)]
-            self.banned_sections = ["See also", "Further reading", "Notes", "Footnotes", "References", "External links"]
+            self.banned_sections = ["See also", "Further reading", "Notes", "Footnotes", "References", "External links", "Sources", "Bibliography"]
         except Exception as e:
             pass
 
