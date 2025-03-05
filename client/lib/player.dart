@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:audio_service/audio_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
 import 'package:flutter/material.dart';
@@ -8,7 +9,11 @@ import 'package:just_audio/just_audio.dart';
 // Credit mostly AudioPlayers example package for skeleton. Replaced with just_audio
 
 class PlayerWidget extends StatefulWidget {
-  const PlayerWidget({super.key, required this.player, required this.api, required this.toNextController});
+  const PlayerWidget(
+      {super.key,
+      required this.player,
+      required this.api,
+      required this.toNextController});
   final AudioPlayer player;
   final ApiPlaylist api;
   final StreamController<int> toNextController;
@@ -22,14 +27,18 @@ class _PlayerWidgetState extends State<PlayerWidget> {
   StreamSubscription? _durationSubscription;
   StreamSubscription? _positionSubscription;
   StreamSubscription? _playerCompleteSubscription;
+  final Future<SharedPreferences> localStorage$ =
+      SharedPreferences.getInstance();
 
   bool get _isPlaying => player.playing;
 
   bool get _isPaused => !player.playing;
 
-  String get _durationText => player.duration?.toString().split('.').first ?? '';
+  String get _durationText =>
+      player.duration?.toString().split('.').first ?? '';
 
-  String get _positionText => player.position?.toString().split('.').first ?? '';
+  String get _positionText =>
+      player.position?.toString().split('.').first ?? '';
 
   AudioPlayer get player => widget.player;
 
@@ -112,8 +121,10 @@ class _PlayerWidgetState extends State<PlayerWidget> {
           value: (player.position != null &&
                   player.duration != null &&
                   player.position!.inMilliseconds > 0 &&
-                  player.position!.inMilliseconds < player.duration!.inMilliseconds)
-              ? player.position!.inMilliseconds / player.duration!.inMilliseconds
+                  player.position!.inMilliseconds <
+                      player.duration!.inMilliseconds)
+              ? player.position!.inMilliseconds /
+                  player.duration!.inMilliseconds
               : 0.0,
         ),
         Text(
@@ -132,6 +143,7 @@ class _PlayerWidgetState extends State<PlayerWidget> {
     _playerCompleteSubscription = player.playbackEventStream.listen((event) {
       setState(() => {});
     });
+    localStorage$.then((ls) => {player.setSpeed(ls.getDouble("speed") ?? 1)});
     player.positionStream.listen((pos) => setState(() => {}));
   }
 
@@ -158,6 +170,7 @@ class _PlayerWidgetState extends State<PlayerWidget> {
 
   Future<void> _speed() async {
     player.setSpeed(player.speed < 2.0 ? player.speed + 0.25 : 1.0);
+    localStorage$.then((ls) => {ls.setDouble("speed", player.speed)});
     setState(() => {});
   }
 }
