@@ -1,6 +1,6 @@
-import wikipediaapi, datetime, uuid, sys, pyttsx3, os
+import wikipediaapi, datetime, uuid, sys, os
 import mysql.connector, configparser, random, subprocess
-import win32com.client, urllib.parse, requests
+import urllib.parse, requests
 from bs4 import BeautifulSoup
 
 class WikipediaArticle:
@@ -39,30 +39,35 @@ class WikiRadioETL:
         try:
             config = configparser.ConfigParser()
             config.read('config.ini')
-            self.con =  mysql.connector.connect(host=config['sql']['host'], user=config['sql']['username'], password=config['sql']['password'], database='wikiradio',  auth_plugin='mysql_native_password')
+            self.con =  mysql.connector.connect(host=config['sql']['host'], user=config['sql']['username'], password=config['sql']['password'], database='WIKIRADIO',  auth_plugin='mysql_native_password')
             self.machine_name = config['machine']['name']
             self.directory = config['machine']['directory']
+            self.voice_directory = config['machine']['voicedirectory']
             self.expire_in_weeks = 2
             self.tree_order = 0
-            self.engine = pyttsx3.init()
-            self.voices = [0, 1]
-            self.voice = self.voices[random.randint(0, len(self.voices) - 1)]
             self.banned_sections = ["See also", "Further reading", "Notes", "Footnotes", "References", "External links", "Sources", "Bibliography"]
         except Exception as e:
+            #print(e)
             pass
 
     def save_voice(self, id: str, content: str):
         if content != '' and content != None:
-            speaker = win32com.client.Dispatch("SAPI.SpVoice") 
-            filestream = win32com.client.Dispatch("SAPI.SpFileStream")
+            piper_path = self.voice_directory
             path = self.directory + "/" + id.replace("-", "_") + ".WAV"
-            speaker.Rate = 2
-            speaker.Voice = speaker.GetVoices().Item(self.voice)
-            filestream.Open(path, 3, False)
-            speaker.AudioOutputStream = filestream
-            speaker.Speak(content)
-            filestream.Close()
+            content = content.replace('"', '""').replace("'", "''").replace('\r\n', ' ').replace('\n', ' ').replace('\r', '')
+            piper_voices = ["/voices/amy/amy", "/voices/hfc_female/en_US-hfc_female-medium",
+                "/voices/hfc_male/en_US-hfc_male-medium", "/voices/kathleen/en_US-kathleen-low", "/voices/kristin/en_US-kristin-medium",
+                "/voices/joe/en_US-joe-medium", "/voices/kusal/en_US-kusal-medium",  "/voices/lessac/en_US-lessac-medium",
+                "/voices/ljspeech/en_US-ljspeech-medium", "/voices/norman/en_US-norman-medium"]
+            cur_voice = piper_voices[random.randint(0, len(piper_voices) - 1)]
+            cmd = f'echo "{content}" | "piper" --model "{piper_path}{cur_voice}.onnx" --output_file "{path}"'
+            p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            for line in p.stdout.readlines():
+                print(line)
+                pass
+            retval = p.wait()
             self.convert_tts(id, path)
+
 
     def convert_tts(self, id: str, path: str):
         try:
@@ -187,30 +192,34 @@ class WikiRadioETL:
         self.save_voice(section_db.id, section_db.content)
 
     def download_article(self, name) -> WikipediaArticle:
-        version = 1
-        if "https://" in name:
-            name = self.get_name_from_url(name)
-        wiki = wikipediaapi.Wikipedia('Wikiradio', 'en')
-        wiki_page = wiki.page(name)
-        if not wiki_page.exists():
-            name = self.search_online(name)
-        wiki_page = wiki.page(name)
-        if not wiki_page.exists():
-            return None
-        wiki_article_db = self.from_url(wiki_page.fullurl)
-        if wiki_article_db != None and (wiki_article_db.status == 'UNINIT'):
-            self.clean_up(wiki_article_db)
-        if wiki_article_db != None and self.is_expired(wiki_article_db.last_retrieved_date):
-            version = wiki_article_db.version + 1
-            wiki_article_db = None
-        if wiki_article_db == None:
-            wiki_article_db = self.init_new_article(wiki_page, version)
-            self.write_article_to_db(wiki_article_db)
-            self.add_summary(wiki_page, wiki_article_db)
-            for new_section in wiki_page.sections:
-                self.preorder_section(wiki_article_db, new_section, None)
-            self.mark_completed(wiki_article_db)
-        return wiki_article_db
+        try:
+            version = 1
+            if "https://" in name:
+                name = self.get_name_from_url(name)
+            wiki = wikipediaapi.Wikipedia('Wikiradio', 'en')
+            wiki_page = wiki.page(name)
+            if not wiki_page.exists():
+                name = self.search_online(name)
+            wiki_page = wiki.page(name)
+            if not wiki_page.exists():
+                return None
+            wiki_article_db = self.from_url(wiki_page.fullurl)
+            if wiki_article_db != None and (wiki_article_db.status == 'UNINIT'):
+                self.clean_up(wiki_article_db)
+            if wiki_article_db != None and self.is_expired(wiki_article_db.last_retrieved_date):
+                version = wiki_article_db.version + 1
+                wiki_article_db = None
+            if wiki_article_db == None:
+                wiki_article_db = self.init_new_article(wiki_page, version)
+                self.write_article_to_db(wiki_article_db)
+                self.add_summary(wiki_page, wiki_article_db)
+                for new_section in wiki_page.sections:
+                    self.preorder_section(wiki_article_db, new_section, None)
+                self.mark_completed(wiki_article_db)
+            return wiki_article_db
+        except Exception as e:
+            pass
+            #print(e)
     
     def clear_everything(self):
         # DELETE FROM USERS_PROGRESS;

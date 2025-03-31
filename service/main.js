@@ -17,7 +17,7 @@ async function connect() {
         host: config['sql']['host'],
         user: config['sql']['username'],
         password: config['sql']['password'],
-        database: 'wikiradio'
+        database: 'WIKIRADIO'
     });
 }
 
@@ -31,19 +31,23 @@ async function setUser(username) {
 }
 
 async function getUser(username) {
-    const query = `SELECT id, username, provider, last_logged_in FROM USERS WHERE username=?`;
-    const con = await connect();
-    const [results, fileds] = await con.query(query, [username]);
-    con.close();
-    if (results.length > 0) {
-        return {
-            id: results[0]['id'],
-            username: results[0]['username'],
-            provider: results[0]['provider']
-        };
-    } else {
-        await setUser(username);
-        return await getUser(username);
+    try {
+        const query = `SELECT id, username, provider, last_logged_in FROM USERS WHERE username=?`;
+        const con = await connect();
+        const [results, fileds] = await con.query(query, [username]);
+        con.close();
+        if (results.length > 0) {
+            return {
+                id: results[0]['id'],
+                username: results[0]['username'],
+                provider: results[0]['provider']
+            };
+        } else {
+            await setUser(username);
+            return await getUser(username);
+        }
+    } catch(ex) {
+        console.log(ex);
     }
 }
 
@@ -78,7 +82,7 @@ async function getUserId(username) {
 
 async function getAllSections(userId, wikiId) {
     //const query = `SELECT id FROM wikipedia_sections WHERE wikipedia_article_id = ?`;
-    const query = `SELECT ws.id "id" FROM wikipedia_sections ws 
+    const query = `SELECT ws.id "id" FROM WIKIPEDIA_SECTIONS ws 
             LEFT JOIN USERS_PROGRESS up ON up.wikipedia_section_id = ws.id AND up.user_id=?
             WHERE  wikipedia_article_id = ? and up.id is null`
     const con = await connect();
@@ -100,9 +104,9 @@ async function addNewArticleForUser(userId, wikiId) {
 
 async function getAllArticlesForUser(userId, wikiId) {
     const query = `SELECT wa.id 'article_id', ws.id 'section_id', wa.title 'article_title', ws.title 'section_title', up.audio_progress 'audio_progress', wa.url 'url', wa.version 'version', up.status 'status'
-        FROM wikipedia_articles wa
-        JOIN wikipedia_sections ws ON ws.wikipedia_article_id = wa.id
-        JOIN users_progress up ON up.wikipedia_section_id = ws.id
+        FROM WIKIPEDIA_ARTICLES wa
+        JOIN WIKIPEDIA_SECTIONS ws ON ws.wikipedia_article_id = wa.id
+        JOIN USERS_PROGRESS up ON up.wikipedia_section_id = ws.id
         WHERE up.user_id = ? and wa.id=? and content != ''
         ORDER BY ws.order_index asc`;
     const con = await connect();
@@ -124,9 +128,9 @@ async function getAllArticlesForUser(userId, wikiId) {
 
 async function getMostRecent(userId) {
     const query = `SELECT distinct  wa.id 'article_id', wa.title 'article_title', wa.version 'version', max(up.last_accessed_date)
-        FROM wikipedia_articles wa
-        JOIN wikipedia_sections ws on ws.wikipedia_article_id = wa.id
-        JOIN users_progress up on up.wikipedia_section_id = ws.id
+        FROM WIKIPEDIA_ARTICLES wa
+        JOIN WIKIPEDIA_SECTIONS ws on ws.wikipedia_article_id = wa.id
+        JOIN USERS_PROGRESS up on up.wikipedia_section_id = ws.id
         WHERE user_id = ?
         GROUP BY  wa.id, wa.title, wa.version
         ORDER BY max(up.last_accessed_date) desc LIMIT 20`;
@@ -157,7 +161,7 @@ async function getWikipediaArticle(articleId) {
 
 async function articleSearch(article) {
     const output = await new Promise((resolve, reject) => {
-        const cmd = `cd "${config['etlpath']}" && python wiki.py download "${article}"`;
+        const cmd = `cd "${config['etlpath']}" && .venv/bin/python3 wiki.py download "${article}"`;
         exec(cmd, (err, stdout, stderr) => {
             if (err)
                 console.log(err);
@@ -216,7 +220,7 @@ async function getUserPlaysetProgress(playset_id, username) {
 }
 
 async function getPlayset(id, username = null) {
-    const get_query = `SELECT id, name FROM playset WHERE id = ?`;
+    const get_query = `SELECT id, name FROM PLAYSET WHERE id = ?`;
     const playsetPlaylist = await getPlaysetPlaylistFromPlaysetId(id);
     const currentPlaylist = username ? await getUserPlaysetProgress(id, username) : null;
     const con = await connect();
@@ -376,6 +380,7 @@ app.get('/recent', async (req, res) => {
         const userId = await getUserId(username);
         res.send(await getMostRecent(userId));
     } catch (ex) {
+        console.log(ex);
         res.sendStatus(500);
     }
 });
@@ -404,7 +409,7 @@ app.get('/audio', async (req, res) => {
         const [results, field] = await con.query(query, [id]);
         con.close();
         if (results.length > 0) {
-            const path = `${config['apppath']}/${results[0].location_directory}/${toFname(id)}.MP3`.replace('/./', '/');
+            const path = `${results[0].location_directory}/${toFname(id)}.MP3`.replace('/./', '/');
             res.download(path);
             return;
         }
