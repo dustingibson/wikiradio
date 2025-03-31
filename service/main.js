@@ -59,14 +59,14 @@ async function updateMostRecent(userId, sectionId) {
 }
 
 async function updateSeekerProgress(userId, sectionId, progress) {
-    const query = `UPDATE users_progress SET audio_progress=?, last_accessed_date=? WHERE user_id=? and wikipedia_section_id=?`;
+    const query = `UPDATE USERS_PROGRESS SET audio_progress=?, last_accessed_date=? WHERE user_id=? and wikipedia_section_id=?`;
     const con = await connect();
     await con.execute(query, [progress, new Date(), userId, sectionId]);
     con.close();
 }
 
 async function updateOverallProgress(userId, sectionId, status) {
-    const query = `UPDATE users_progress SET audio_progress=0, status=? WHERE user_id=? and wikipedia_section_id=?`;
+    const query = `UPDATE USERS_PROGRESS SET audio_progress=0, status=? WHERE user_id=? and wikipedia_section_id=?`;
     const con = await connect();
     await con.execute(query, [status, userId, sectionId]);
     con.close();
