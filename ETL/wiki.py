@@ -62,10 +62,13 @@ class WikiRadioETL:
             cur_voice = piper_voices[random.randint(0, len(piper_voices) - 1)]
             cmd = f'echo "{content}" | "piper" --model "{piper_path}{cur_voice}.onnx" --output_file "{path}"'
             p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            for line in p.stdout.readlines():
-                print(line)
+            # for line in p.stdout.readlines():
+            #     print(line)
+            #     pass
+            try:
+                retval = p.wait()
+            except:
                 pass
-            retval = p.wait()
             self.convert_tts(id, path)
 
 
@@ -196,7 +199,7 @@ class WikiRadioETL:
             version = 1
             if "https://" in name:
                 name = self.get_name_from_url(name)
-            wiki = wikipediaapi.Wikipedia('Wikiradio', 'en')
+            wiki = wikipediaapi.Wikipedia('WikiRadio', 'en')
             wiki_page = wiki.page(name)
             if not wiki_page.exists():
                 name = self.search_online(name)
@@ -219,7 +222,7 @@ class WikiRadioETL:
             return wiki_article_db
         except Exception as e:
             pass
-            #print(e)
+            print(e)
     
     def clear_everything(self):
         # DELETE FROM USERS_PROGRESS;
