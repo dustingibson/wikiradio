@@ -1,6 +1,6 @@
-import wikipediaapi, datetime, uuid, sys, os
+import wikipediaapi, datetime, uuid, sys, os, time
 import mysql.connector, configparser, random, subprocess
-import urllib.parse, requests
+import urllib.parse, requests, threading
 from bs4 import BeautifulSoup
 
 class WikipediaArticle:
@@ -135,15 +135,16 @@ class WikiRadioETL:
         self.con.commit()
         cur.close()
 
-    def preorder_section(self, page: WikipediaArticle, section: wikipediaapi.WikipediaPageSection, parent_id: str):
+    def preorder_section(self, page: WikipediaArticle, section: wikipediaapi.WikipediaPageSection, parent_id: str, threads: list[threading.Thread]):
         if (section == None or section.title in self.banned_sections):
             return
         self.tree_order = self.tree_order + 1
         section_db = WikipediaSection(str(uuid.uuid1()), page.id, parent_id, section.title, section.text, self.tree_order)
         self.write_section_to_db(section_db)
-        self.save_voice(section_db.id, section_db.content)
+        t = threading.Thread( target=self.save_voice, args=(section_db.id, section_db.content))
+        threads.append(t)
         for new_section in section.sections:
-            self.preorder_section(page, new_section, section_db.id)
+            self.preorder_section(page, new_section, section_db.id, threads)
         
     def is_expired(self, cur_date: datetime) -> bool:
         return cur_date < datetime.datetime.now() - datetime.timedelta(weeks=self.expire_in_weeks)
@@ -200,6 +201,7 @@ class WikiRadioETL:
     def download_article(self, name) -> WikipediaArticle:
         try:
             version = 1
+            threads_cnt = 5 
             if "https://" in name:
                 name = self.get_name_from_url(name)
             wiki = wikipediaapi.Wikipedia('WikiRadio', 'en')
@@ -219,8 +221,21 @@ class WikiRadioETL:
                 wiki_article_db = self.init_new_article(wiki_page, version)
                 self.write_article_to_db(wiki_article_db)
                 self.add_summary(wiki_page, wiki_article_db)
+                threads: list[threading.Thread] = []
                 for new_section in wiki_page.sections:
-                    self.preorder_section(wiki_article_db, new_section, None)
+                    self.preorder_section(wiki_article_db, new_section, None, threads)
+
+                cnt = 0
+                while cnt <= len(threads):
+                    for i in range(cnt, cnt + threads_cnt):
+                        if i < len(threads):
+                            threads[i].start()
+                    for i in range(cnt, cnt + threads_cnt):
+                        if i < len(threads):
+                            threads[i].join()
+                    cnt += threads_cnt
+
+            
                 self.mark_completed(wiki_article_db)
             return wiki_article_db
         except Exception as e:
@@ -235,13 +250,24 @@ class WikiRadioETL:
         pass
 
     def upload(self, file_path):
-        with open(file_path, 'rb') as f:
-            files = {'file': f}
-            post_url  = self.service_url + f"/upload?directory={urllib.parse.quote_plus(self.directory)}"
-            response = requests.post(post_url, files=files)
-            if response.text == "Success":
-                return True
-            return False
+        print("Uploading: " + file_path)
+        retries = 6
+        while retries >= 0:
+            try:
+                with open(file_path, 'rb') as f:
+                    files = {'file': f}
+                    post_url  = self.service_url + f"/upload?directory={urllib.parse.quote_plus(self.directory)}"
+                    response = requests.post(post_url, files=files, timeout=None)
+                    if response.text == "Success":
+                        return True
+                    retries -= 1
+            except Exception as e:
+                print(e)
+                retries -= 1
+            print("SLEEPING...")
+            time.sleep(10)
+        print("Done Uploading: " + file_path)
+            
 
 if __name__ == '__main__':
     try:
