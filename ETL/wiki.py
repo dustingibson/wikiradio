@@ -72,7 +72,7 @@ class WikiRadioETL:
             except:
                 pass
             self.convert_tts(id, path)
-            self.upload(path)
+            self.upload(path.replace(".WAV", ".MP3"))
 
 
     def convert_tts(self, id: str, path: str):

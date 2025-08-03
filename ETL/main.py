@@ -27,7 +27,8 @@ def upload():
     try:
         if 'file' in request.files:
             print("There are files")
-        upload_directory = "/home/dustin/test"
+        etl = WikiRadioETL()
+        upload_directory = etl.directory
         file = request.files['file']
         file.save(os.path.join(upload_directory , secure_filename(file.filename)))
         return "Success"
