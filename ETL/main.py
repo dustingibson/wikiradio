@@ -1,5 +1,7 @@
+import os
 from flask import Flask, request
 from wiki import WikiRadioETL
+from werkzeug.utils import secure_filename
 app = Flask (__name__)
 
 @app.route("/")
@@ -19,3 +21,22 @@ def run():
             return title
     except Exception as e:
         pass
+
+@app.route('/upload', methods=['POST'])
+def upload():
+    try:
+        if 'file' in request.files:
+            print("There are files")
+        upload_directory = "/home/dustin/test"
+        file = request.files['file']
+        file.save(os.path.join(upload_directory , secure_filename(file.filename)))
+        return "Success"
+    except Exception as e:
+        return "Error"
+    
+@app.route('/test_upload', methods=['GET'])
+def test_upload():
+    fname = request.args.get('file_path')
+    etl = WikiRadioETL()
+    etl.upload(fname)
+    return "Success"

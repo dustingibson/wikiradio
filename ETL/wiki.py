@@ -42,12 +42,14 @@ class WikiRadioETL:
             self.con =  mysql.connector.connect(host=config['sql']['host'], user=config['sql']['username'], password=config['sql']['password'], database='WIKIRADIO',  auth_plugin='mysql_native_password')
             self.machine_name = config['machine']['name']
             self.directory = config['machine']['directory']
+            self.scp_directory = config['machine']['scpdirectory']
             self.voice_directory = config['machine']['voicedirectory']
+            self.service_url = config['machine']['serviceurl']
             self.expire_in_weeks = 2
             self.tree_order = 0
             self.banned_sections = ["See also", "Further reading", "Notes", "Footnotes", "References", "External links", "Sources", "Bibliography"]
         except Exception as e:
-            #print(e)
+            print(e)
             pass
 
     def save_voice(self, id: str, content: str):
@@ -70,6 +72,7 @@ class WikiRadioETL:
             except:
                 pass
             self.convert_tts(id, path)
+            self.upload(path)
 
 
     def convert_tts(self, id: str, path: str):
@@ -124,7 +127,7 @@ class WikiRadioETL:
                             wiki_section.title, 
                             wiki_section.content, 
                             self.machine_name, 
-                            self.directory, 
+                            self.scp_directory, 
                             None, 
                             wiki_section.last_retrieved_date_str, 
                             wiki_section.status, 
@@ -230,6 +233,15 @@ class WikiRadioETL:
         # DELETE FROM WIKIPEDIA_ARTICLES;
         # TODO: Implement 
         pass
+
+    def upload(self, file_path):
+        with open(file_path, 'rb') as f:
+            files = {'file': f}
+            post_url  = self.service_url + f"/upload?directory={urllib.parse.quote_plus(self.directory)}"
+            response = requests.post(post_url, files=files)
+            if response.text == "Success":
+                return True
+            return False
 
 if __name__ == '__main__':
     try:

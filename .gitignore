@@ -164,3 +164,7 @@ cython_debug/
 *.sql
 *.wav
 *.mp3
+
+prod
+
+node_modules
