@@ -41,3 +41,7 @@ def test_upload():
     etl = WikiRadioETL()
     etl.upload(fname)
     return "Success"
+
+
+if __name__ == "__main__":
+    app.run(host='0.0.0.0')

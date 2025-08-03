@@ -1,0 +1,1 @@
+uwsgi --plugin python3 --socket 0.0.0.0:6021 --protocol=http --wsgi-file wsgi.py --callable app -H prod  --socket-timeout 50000 -p 5
